@@ -10,4 +10,4 @@ rebuild: rebuild.cpp
 	$(CC) $(CXXFLAGS) -o rebuild rebuild.cpp
 
 clean:
-	rm -f box rebuild project3.box
+	rm -f box rebuild *.box
