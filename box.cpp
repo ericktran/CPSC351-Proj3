@@ -3,7 +3,7 @@
 // Project 3
 // Due November 12, 2021
 // Purpose: Create functions to pack files into one "box file",
-//        read the contents of the box, and unpack the box.
+// read the contents of the box, and unpack the box.
 
 #include <fcntl.h>
 #include <iostream>
@@ -23,7 +23,7 @@ bool unboxFiles(char *boxname, char *outputFiles[], int numFiles);
 bool boxFiles(char *boxname, char *inputFiles[], int numFiles);
 
 struct boxdata {
-  char *filenames[10];
+  char filenames[10][10];
   mode_t fileModes[10];
   int fileOffsets[10];
   int numFiles;
@@ -102,9 +102,7 @@ bool listFiles(char *boxname) {
   box1data = *reinterpret_cast<boxdata*>(metadataBuffer);
   std::cout << box1data.numFiles << std::endl;
   for(int i = 0; i < box1data.numFiles; i++) {
-    std::cout << i << std::endl; // print
-    // segfault here
-    std::cout << box1data.filenames[i] << std::endl;
+    std::cout << box1data.fileOffsets[i] << "\t" << box1data.filenames[i] << std::endl;
   }
   close(box_fd);
   return 1;
@@ -119,6 +117,7 @@ bool unboxFiles(char *boxname, char *outputFiles[], int numFiles) {
     return 0;
   }
 
+  // Reads metadata and gets contents of box
   char metadataBuffer[sizeof(boxdata)];
   read(box_fd, metadataBuffer, sizeof(metadataBuffer));
   box1data = *reinterpret_cast<boxdata*>(metadataBuffer);
@@ -127,16 +126,14 @@ bool unboxFiles(char *boxname, char *outputFiles[], int numFiles) {
   for (int i = 0; i < box1data.numFiles; i++) {
     fileIndices.insert(std::pair<std::string, int>(box1data.filenames[i], i));
   }
-
-  std::cout << box1data.numFiles << std::endl;
-
+  // increment through given files to unpack
   for (int i = 0; i < numFiles; i++) {
-    char readBuffer[100];
+    char readBuffer[NUM_BYTES_TO_READ];
     int bytesRead = 1;
+    int bytesToRead = NUM_BYTES_TO_READ;
     int boxIndex = fileIndices.find(outputFiles[i])->second;
     lseek(box_fd, box1data.fileOffsets[boxIndex], SEEK_SET);
-    int output_fd = open(boxname, O_WRONLY | O_CREAT, box1data.fileModes[boxIndex]);
-    int bytesToRead = NUM_BYTES_TO_READ;
+    int output_fd = open(outputFiles[i], O_WRONLY | O_CREAT, box1data.fileModes[boxIndex]);
 
     if(boxIndex < box1data.numFiles - 1) {
       int bytesLeft = box1data.fileOffsets[boxIndex + 1] - box1data.fileOffsets[boxIndex];
@@ -155,23 +152,20 @@ bool unboxFiles(char *boxname, char *outputFiles[], int numFiles) {
         write(output_fd, readBuffer, bytesRead);
       }
     }
-
-
+    close(box_fd);
+    close(output_fd);
   }
   return 1;
 }
 
 // Reads files and writes them to a new box
 bool boxFiles(char *boxname, char *inputFiles[], int numFiles) {
-  // std::cout << boxname << std::endl;  //print statement
-  // std::cout << numFiles << std::endl;  //print statement
   boxdata box1data;
   box1data.numFiles = numFiles;
 
-  std::cout << boxname << std::endl;  // print statement
   int box_fd = open(boxname, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
   if(box_fd < 0) {
-    std::cerr << "Error creating boxfile\n" << std::endl;
+    std::cerr << "Error creating boxfile" << std::endl;
     return 0;
   }
   int offset = sizeof(boxdata);
@@ -179,20 +173,18 @@ bool boxFiles(char *boxname, char *inputFiles[], int numFiles) {
 
   // increment through all files in inputFiles
   for(int i = 0; i < numFiles; i++){
-    std::cout << inputFiles[i] << std::endl;       // print statement
     struct stat sb;
     char readBuffer[NUM_BYTES_TO_READ];
     int bytesRead = 1;
     int file_fd = open(inputFiles[i], O_RDONLY);
     fstat(file_fd, &sb);
-    box1data.filenames[i] = inputFiles[i];
-    std::cout << box1data.filenames[i] << std::endl;
+    strcpy(box1data.filenames[i],inputFiles[i]);
     box1data.fileModes[i] = sb.st_mode;
     box1data.fileOffsets[i] = offset;
 
     // error
     if(file_fd < 0) {
-      std::cerr << "Error reading input file\n" << std::endl;
+      std::cerr << "fd: " << file_fd << "\nError reading input file: " << inputFiles[i] << std::endl;
       return 0;
     }
 
@@ -205,6 +197,7 @@ bool boxFiles(char *boxname, char *inputFiles[], int numFiles) {
 
     close(file_fd);
 
+    // deletes file after writing
     if(remove(inputFiles[i]) != 0) {
       std::cerr << "Error deleting file" << std::endl;
       return 0;
